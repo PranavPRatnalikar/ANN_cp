@@ -25,3 +25,6 @@ six
 streamlit
 urllib3
 dlib
+kornia
+opencv-python
+torch
