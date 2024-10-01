@@ -61,23 +61,42 @@ def add_person(name, image_file):
         st.error("No face detected in the image.")
 
 # Recognize person from image
+# def recognize_face(image_file):
+#     unknown_encodings = load_and_encode(image_file)
+#     if not unknown_encodings:
+#         st.error("No face detected in the image.")
+#         return
+
+#     matches = []
+#     for unknown_encoding in unknown_encodings:
+#         for name, data in ref.get().items():
+#             known_encoding = np.array(data['encoding'])
+#             if face_recognition.compare_faces([known_encoding], unknown_encoding)[0]:
+#                 matches.append(name)
+
+#     if matches:
+#         st.success(f"Matched with: {', '.join(matches)}")
+#     else:
+#         st.error("No matches found.")
+
 def recognize_face(image_file):
     unknown_encodings = load_and_encode(image_file)
     if not unknown_encodings:
         st.error("No face detected in the image.")
         return
 
-    matches = []
+    matches = set()  # Use a set to store unique names
     for unknown_encoding in unknown_encodings:
         for name, data in ref.get().items():
             known_encoding = np.array(data['encoding'])
             if face_recognition.compare_faces([known_encoding], unknown_encoding)[0]:
-                matches.append(name)
+                matches.add(name)  # Add the matched name to the set
 
     if matches:
         st.success(f"Matched with: {', '.join(matches)}")
     else:
         st.error("No matches found.")
+
 
 # Streamlit UI
 st.title("Face Recognition App")
