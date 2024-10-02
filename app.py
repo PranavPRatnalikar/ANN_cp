@@ -6,6 +6,8 @@ import face_recognition
 import numpy as np
 import cv2
 import dlib
+from moviepy.editor import VideoFileClip
+import random
 
 # Firebase setup (initialize using your Firebase credentials)
 current_directory = os.path.dirname(os.path.abspath(__file__))
@@ -22,7 +24,7 @@ if not firebase_admin._apps:
 ref = db.reference('/')
 
 # Dlib model for face detection and landmarking
-shape_predictor_path = "shape_predictor_68_face_landmarks.dat"
+shape_predictor_path = "shape_predictor_68_face_landmarks.dat" #project2\shape_predictor_68_face_landmarks.dat
 detector = dlib.get_frontal_face_detector()
 shape_predictor = dlib.shape_predictor(shape_predictor_path)
 
@@ -50,34 +52,71 @@ def detect_and_align_faces(image):
     aligned_faces = [dlib.get_face_chip(resized_image, shape_predictor(gray, face), size=256) for face in faces]
     return aligned_faces if aligned_faces else None
 
-# Function to save multiple encodings for each person in Firebase
-def add_person(name, image_files):
-    all_encodings = []
-    for image_file in image_files:
-        encodings = load_and_encode(image_file)
-        if encodings:
-            all_encodings.extend(encodings)
-    
-    if all_encodings:
-        average_encoding = np.mean(all_encodings, axis=0).tolist()
-        ref.child(name).set({"encoding": average_encoding})
-        st.success(f"Person {name} added successfully with {len(image_files)} images!")
-    else:
-        st.error("No face detected in the images.")
+# Function to extract frames from video and process embeddings
+def process_video_for_embeddings(video_file, name):
+    video_path = os.path.join(current_directory, video_file.name)
+    with open(video_path, 'wb') as f:
+        f.write(video_file.getvalue())
 
-# Function to recognize person using multiple face embeddings
+    output_folder = os.path.join(current_directory, "output_frames")
+    num_frames = 10  # Number of frames to extract
+    extract_random_frames(video_path, output_folder, num_frames=num_frames)
+    
+    encodings = []
+    for frame_file in os.listdir(output_folder):
+        frame_path = os.path.join(output_folder, frame_file)
+        with open(frame_path, 'rb') as img_file:
+            img_encodings = load_and_encode(img_file)
+            if img_encodings:
+                encodings.extend(img_encodings)
+
+    if encodings:
+        average_encoding = np.mean(encodings, axis=0).tolist()
+        ref.child(name).set({"encoding": average_encoding})
+        st.success(f"Person {name} added successfully with video input!")
+    else:
+        st.error("No face detected in the video frames.")
+
+# Function to extract random frames from a video
+def extract_random_frames(video_path, output_folder, num_frames=5):
+    if not os.path.exists(output_folder):
+        os.makedirs(output_folder)
+
+    video = VideoFileClip(video_path)
+    duration = video.duration
+    random_times = sorted(random.uniform(0, duration) for _ in range(num_frames))
+
+    for i, time in enumerate(random_times):
+        frame = video.get_frame(time)
+        filename = f"frame_{i:04d}_{time:.2f}s.jpg"
+        output_path = os.path.join(output_folder, filename)
+        video.save_frame(output_path, t=time)
+
+    video.close()
+
+# Add person to database with image input
+def add_person(name, image_file):
+    encodings = load_and_encode(image_file)
+    if encodings:
+        encoding = encodings[0].tolist()
+        ref.child(name).set({"encoding": encoding})
+        st.success(f"Person {name} added successfully!")
+    else:
+        st.error("No face detected in the image.")
+
+# Recognize person from image
 def recognize_face(image_file):
     unknown_encodings = load_and_encode(image_file)
     if not unknown_encodings:
         st.error("No face detected in the image.")
         return
 
-    matches = set()
+    matches = set()  # Use a set to store unique names
     for unknown_encoding in unknown_encodings:
         for name, data in ref.get().items():
             known_encoding = np.array(data['encoding'])
             if face_recognition.compare_faces([known_encoding], unknown_encoding)[0]:
-                matches.add(name)
+                matches.add(name)  # Add the matched name to the set
 
     if matches:
         st.success(f"Matched with: {', '.join(matches)}")
@@ -87,15 +126,22 @@ def recognize_face(image_file):
 # Streamlit UI
 st.title("Face Recognition App")
 
-menu = ["Add Person", "Recognize Face"]
+menu = ["Add Person (Image Input)", "Add Person (Video Input)", "Recognize Face"]
 choice = st.sidebar.selectbox("Menu", menu)
 
-if choice == "Add Person":
-    st.subheader("Add a New Person")
+if choice == "Add Person (Image Input)":
+    st.subheader("Add a New Person (Using Image)")
     name = st.text_input("Enter name:")
-    image_files = st.file_uploader("Upload multiple images", type=["jpg", "png", "jpeg"], accept_multiple_files=True)
-    if st.button("Add Person") and image_files and name:
-        add_person(name, image_files)
+    image_file = st.file_uploader("Upload an image", type=["jpg", "png", "jpeg"])
+    if st.button("Add Person") and image_file and name:
+        add_person(name, image_file)
+
+elif choice == "Add Person (Video Input)":
+    st.subheader("Add a New Person (Using Video)")
+    name = st.text_input("Enter name:")
+    video_file = st.file_uploader("Upload a video", type=["mp4", "avi", "mov"])
+    if st.button("Add Person") and video_file and name:
+        process_video_for_embeddings(video_file, name)
 
 elif choice == "Recognize Face":
     st.subheader("Recognize Face")
