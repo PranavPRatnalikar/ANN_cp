@@ -22,7 +22,7 @@ if not firebase_admin._apps:
 ref = db.reference('/')
 
 # Dlib model for face detection and landmarking
-shape_predictor_path = "shape_predictor_68_face_landmarks.dat" #project2\shape_predictor_68_face_landmarks.dat
+shape_predictor_path = "shape_predictor_68_face_landmarks.dat"
 detector = dlib.get_frontal_face_detector()
 shape_predictor = dlib.shape_predictor(shape_predictor_path)
 
@@ -50,53 +50,39 @@ def detect_and_align_faces(image):
     aligned_faces = [dlib.get_face_chip(resized_image, shape_predictor(gray, face), size=256) for face in faces]
     return aligned_faces if aligned_faces else None
 
-# Add person to database
-def add_person(name, image_file):
-    encodings = load_and_encode(image_file)
-    if encodings:
-        encoding = encodings[0].tolist()
-        ref.child(name).set({"encoding": encoding})
-        st.success(f"Person {name} added successfully!")
+# Function to save multiple encodings for each person in Firebase
+def add_person(name, image_files):
+    all_encodings = []
+    for image_file in image_files:
+        encodings = load_and_encode(image_file)
+        if encodings:
+            all_encodings.extend(encodings)
+    
+    if all_encodings:
+        average_encoding = np.mean(all_encodings, axis=0).tolist()
+        ref.child(name).set({"encoding": average_encoding})
+        st.success(f"Person {name} added successfully with {len(image_files)} images!")
     else:
-        st.error("No face detected in the image.")
+        st.error("No face detected in the images.")
 
-# Recognize person from image
-# def recognize_face(image_file):
-#     unknown_encodings = load_and_encode(image_file)
-#     if not unknown_encodings:
-#         st.error("No face detected in the image.")
-#         return
-
-#     matches = []
-#     for unknown_encoding in unknown_encodings:
-#         for name, data in ref.get().items():
-#             known_encoding = np.array(data['encoding'])
-#             if face_recognition.compare_faces([known_encoding], unknown_encoding)[0]:
-#                 matches.append(name)
-
-#     if matches:
-#         st.success(f"Matched with: {', '.join(matches)}")
-#     else:
-#         st.error("No matches found.")
-
+# Function to recognize person using multiple face embeddings
 def recognize_face(image_file):
     unknown_encodings = load_and_encode(image_file)
     if not unknown_encodings:
         st.error("No face detected in the image.")
         return
 
-    matches = set()  # Use a set to store unique names
+    matches = set()
     for unknown_encoding in unknown_encodings:
         for name, data in ref.get().items():
             known_encoding = np.array(data['encoding'])
             if face_recognition.compare_faces([known_encoding], unknown_encoding)[0]:
-                matches.add(name)  # Add the matched name to the set
+                matches.add(name)
 
     if matches:
         st.success(f"Matched with: {', '.join(matches)}")
     else:
         st.error("No matches found.")
-
 
 # Streamlit UI
 st.title("Face Recognition App")
@@ -107,9 +93,9 @@ choice = st.sidebar.selectbox("Menu", menu)
 if choice == "Add Person":
     st.subheader("Add a New Person")
     name = st.text_input("Enter name:")
-    image_file = st.file_uploader("Upload an image", type=["jpg", "png", "jpeg"])
-    if st.button("Add Person") and image_file and name:
-        add_person(name, image_file)
+    image_files = st.file_uploader("Upload multiple images", type=["jpg", "png", "jpeg"], accept_multiple_files=True)
+    if st.button("Add Person") and image_files and name:
+        add_person(name, image_files)
 
 elif choice == "Recognize Face":
     st.subheader("Recognize Face")
