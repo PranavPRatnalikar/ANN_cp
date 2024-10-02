@@ -24,13 +24,17 @@ if not firebase_admin._apps:
 ref = db.reference('/')
 
 # Dlib model for face detection and landmarking
-shape_predictor_path = "shape_predictor_68_face_landmarks.dat"  # Make sure this path is correct
+shape_predictor_path = "shape_predictor_68_face_landmarks.dat" #project2\shape_predictor_68_face_landmarks.dat
 detector = dlib.get_frontal_face_detector()
 shape_predictor = dlib.shape_predictor(shape_predictor_path)
 
 # Function to load and encode an image
-def load_and_encode(image):
+def load_and_encode(image_file):
     try:
+        image_bytes = image_file.read()
+        np_image = np.frombuffer(image_bytes, np.uint8)
+        image = cv2.imdecode(np_image, cv2.IMREAD_COLOR)
+
         aligned_faces = detect_and_align_faces(image)
         if aligned_faces:
             encodings = [face_recognition.face_encodings(face)[0] for face in aligned_faces if face_recognition.face_encodings(face)]
@@ -48,20 +52,23 @@ def detect_and_align_faces(image):
     aligned_faces = [dlib.get_face_chip(resized_image, shape_predictor(gray, face), size=256) for face in faces]
     return aligned_faces if aligned_faces else None
 
-# Function to extract frames from video and process embeddings directly from the uploaded video
+# Function to extract frames from video and process embeddings
 def process_video_for_embeddings(video_file, name):
-    video = VideoFileClip(video_file)  # Use the uploaded video file directly
-    duration = video.duration
-    num_frames = 10  # Number of frames to extract
-    random_times = sorted(random.uniform(0, duration) for _ in range(num_frames))
+    video_path = os.path.join(current_directory, video_file.name)
+    with open(video_path, 'wb') as f:
+        f.write(video_file.getvalue())
 
+    output_folder = os.path.join(current_directory, "output_frames")
+    num_frames = 10  # Number of frames to extract
+    extract_random_frames(video_path, output_folder, num_frames=num_frames)
+    
     encodings = []
-    for time in random_times:
-        frame = video.get_frame(time)
-        frame_rgb = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)  # Convert to BGR for face recognition
-        img_encodings = load_and_encode(frame_rgb)
-        if img_encodings:
-            encodings.extend(img_encodings)
+    for frame_file in os.listdir(output_folder):
+        frame_path = os.path.join(output_folder, frame_file)
+        with open(frame_path, 'rb') as img_file:
+            img_encodings = load_and_encode(img_file)
+            if img_encodings:
+                encodings.extend(img_encodings)
 
     if encodings:
         average_encoding = np.mean(encodings, axis=0).tolist()
@@ -69,6 +76,23 @@ def process_video_for_embeddings(video_file, name):
         st.success(f"Person {name} added successfully with video input!")
     else:
         st.error("No face detected in the video frames.")
+
+# Function to extract random frames from a video
+def extract_random_frames(video_path, output_folder, num_frames=5):
+    if not os.path.exists(output_folder):
+        os.makedirs(output_folder)
+
+    video = VideoFileClip(video_path)
+    duration = video.duration
+    random_times = sorted(random.uniform(0, duration) for _ in range(num_frames))
+
+    for i, time in enumerate(random_times):
+        frame = video.get_frame(time)
+        filename = f"frame_{i:04d}_{time:.2f}s.jpg"
+        output_path = os.path.join(output_folder, filename)
+        video.save_frame(output_path, t=time)
+
+    video.close()
 
 # Add person to database with image input
 def add_person(name, image_file):
@@ -103,7 +127,7 @@ def recognize_face(image_file):
 st.title("Face Recognition App")
 
 menu = ["Add Person (Image Input)", "Add Person (Video Input)", "Recognize Face"]
-choice = st.sidebar.radio("Menu", menu)
+choice = st.sidebar.selectbox("Menu", menu)
 
 if choice == "Add Person (Image Input)":
     st.subheader("Add a New Person (Using Image)")
