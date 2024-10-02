@@ -28,3 +28,5 @@ dlib
 kornia
 opencv-python
 torch
+moviepy
+
