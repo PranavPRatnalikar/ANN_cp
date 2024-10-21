@@ -5,3 +5,5 @@ firebase-admin
 streamlit
 requests
 moviepy
+mediapipe
+dlib
