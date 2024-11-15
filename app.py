@@ -16,12 +16,12 @@ mp_drawing = mp.solutions.drawing_utils
 
 # Firebase setup
 current_directory = os.path.dirname(os.path.abspath(__file__))
-firebase_cred_path = os.path.join(current_directory, "espiotproject1-firebase-adminsdk-856yr-1b9ae0c516.json")
+firebase_cred_path = os.path.join(current_directory, "galaxy-unhilater-firebase-adminsdk-6diyp-a486ede4b4.json")
 
 if not firebase_admin._apps:
     cred = credentials.Certificate(firebase_cred_path)
     firebase_admin.initialize_app(cred, {
-        'databaseURL': 'https://espiotproject1-default-rtdb.firebaseio.com'
+        'databaseURL': 'https://galaxy-unhilater-default-rtdb.firebaseio.com'
     })
 
 # Dlib setup for face alignment
